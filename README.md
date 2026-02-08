@@ -15,6 +15,7 @@
 ## 📋 Table of Contents
 
 - [Overview](#-overview)
+- [Screenshots](#-screenshots)
 - [Features](#-features)
 - [Architecture](#-architecture)
 - [Prerequisites](#-prerequisites)
@@ -41,6 +42,34 @@ QyrixAI is a cutting-edge AI avatar chat application that enables natural voice-
 - **Video Avatar Integration**: Real-time video animations synchronized with speech
 - **Knowledge Base Integration**: Specialized knowledge bases for charity information and career guidance
 - **Local LLM Support**: Powered by Ollama for privacy-focused, offline AI interactions
+
+---
+
+## 📸 Screenshots
+
+### Aasho AI Interface
+
+<div align="center">
+
+![Aasho AI Interface](aashuSS.png)
+
+**Aasho AI – Your Friendly Assistant**
+
+*Aasho features a modern dark-themed interface with a stylized anime-style avatar. The interface showcases a confident, friendly female assistant with a sleek design, perfect for career guidance and professional interactions. The vibrant blue accent colors and glowing microphone button create an engaging user experience.*
+
+</div>
+
+### AhmedX AI Interface
+
+<div align="center">
+
+![AhmedX AI Interface](AhmedXSS.png)
+
+**AhmedX AI – Your Friendly Assistant**
+
+*AhmedX presents a warm, welcoming interface with a beautiful gradient background transitioning from orange to light yellow. The interface features a kid-friendly avatar in traditional Islamic attire, set against a serene mosque backdrop. The design emphasizes a gentle, approachable personality perfect for educational and charitable information queries.*
+
+</div>
 
 ---
 
