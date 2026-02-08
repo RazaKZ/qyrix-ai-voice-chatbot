@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qyrix AI - Madni Bot Voice Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&family=Inter&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: #000000;
+  color: white;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+.container {
+  width: 100%;
+  max-width: 600px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  position: relative;
+}
+
+/* 1️⃣ Anime character video (e.g. 10-second loop) - always visible, plays only during TTS */
+.video-wrap {
+  position: relative;
+  width: 400px;
+  height: 500px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000000;
+  /* border: 1px solid rgba(0, 242, 255, 0.3); */
+}
+#avatar-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
+  display: block;
+}
+/* Optional: subtle "talking" pulse driven by volume/time when TTS is active */
+.video-wrap.talking {
+  box-shadow: 0 0 25px rgba(0, 242, 255, 0.4);
+  transition: box-shadow 0.1s ease-out;
+}
+
+.status {
+  font-size: 16px;
+  color: #00f2ff;
+  margin-bottom: 20px;
+  text-align: center;
+  min-height: 24px;
+  font-family: 'Orbitron', sans-serif;
+}
+.heading {
+  /* font-size: 16px; */
+  color: #00f2ff;
+  margin-bottom: 20px;
+  text-align: center;
+  /* min-height: 24px; */
+  font-family: 'Orbitron', sans-serif;
+}
+.status.listening { color: #ff6b6b; }
+.status.error { color: #ff6b6b; font-size: 14px; }
+.text-display {
+  position: absolute;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 500px;
+  background: rgba(0,0,0,0.6);
+  padding: 12px 18px;
+  border-radius: 15px;
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  font-size: 14px;
+  text-align: center;
+  min-height: 50px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  transition: opacity 0.3s;
+  white-space: pre-line;
+}
+.text-display.show { opacity: 1; }
+.play-voice-btn {
+  margin-top: 4px;
+  padding: 6px 14px;
+  border: 1px solid rgba(0, 242, 255, 0.6);
+  background: rgba(0, 242, 255, 0.2);
+  color: #00f2ff;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.play-voice-btn:hover { background: rgba(0, 242, 255, 0.4); }
+.voice-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #00f2ff, #0053b3);
+  box-shadow: 0 0 30px rgba(0, 242, 255, 0.8);
+  color: white;
+  font-size: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+.voice-btn:hover { transform: scale(1.08); }
+.voice-btn.listening {
+  background: linear-gradient(135deg, #ff6b6b, #c92a2a);
+  box-shadow: 0 0 40px rgba(255, 107, 107, 1);
+}
+.ollama-badge {
+  position: absolute;
+  top: 16px;
+  right: -16px;
+  background: rgba(0, 242, 255, 0.2);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  border: 1px solid rgba(0, 242, 255, 0.5);
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="heading"><h2>Aasho AI – your friendly assistant</h2></div>
+  <!-- <div class="ollama-badge">Qyrix AI + Ollama</div> -->
+
+  <!-- 1️⃣ Anime character video: replace src with your 10-second (or any length) loop video -->
+  <div class="video-wrap" id="videoWrap">
+    <video id="avatar-video" loop muted playsinline preload="auto">
+      <source src="../aashu.mp4" type="video/mp4">
+    </video>
+  </div>
+
+  <!-- Audio element: used when TTS is from a URL; with SpeechSynthesis we sync video to utterance events -->
+  <audio id="tts-audio" style="display:none"></audio>
+
+  <div class="status" id="status">Click mic to start talking</div>
+  <div class="text-display" id="textDisplay"></div>
+  <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()">🎤</button>
+</div>
+
+<script>
+// ============ CONFIG: Replace these for your setup ============
+const CONFIG = {
+  // Your anime character video (e.g. 10-second loop). Relative to this HTML or full URL.
+  VIDEO_SRC: "../aashu.mp4",
+  // Aasho Bot backend (aashu_ollama.py) – runs on port 8002
+  BACKEND_URL: "http://127.0.0.1:8002",
+  CHAT_ENDPOINT: "/aasho_chat"
+};
+
+// ============ DOM refs ============
+const voiceBtn = document.getElementById("voiceBtn");
+const status = document.getElementById("status");
+const textDisplay = document.getElementById("textDisplay");
+const avatarVideo = document.getElementById("avatar-video");
+const videoWrap = document.getElementById("videoWrap");
+const ttsAudio = document.getElementById("tts-audio");
+
+// ============ State ============
+let recognition = null;
+let isListening = false;   // user is speaking (mic active)
+let isProcessing = false;  // waiting for chatbot API
+let isSpeaking = false;   // chatbot TTS is playing
+let synth = window.speechSynthesis;
+let lastBotReply = "";
+let femaleVoice = null;
+let mouthSyncRAF = null;  // optional volume-based mouth sync animation
+
+// ============ VIDEO CONTROL ============
+
+/** Pause the avatar video (e.g. when user starts speaking or TTS ends). */
+function pauseAvatarVideo() {
+  if (!avatarVideo) return;
+  avatarVideo.pause();
+  videoWrap.classList.remove("talking");
+  stopMouthSync();
+}
+
+/**
+ * Play the avatar video and keep it in sync with TTS.
+ * Video has loop=true so if TTS is longer than video length, it loops automatically.
+ */
+function playAvatarVideoWithTTS() {
+  if (!avatarVideo) return;
+  avatarVideo.loop = true;
+  avatarVideo.currentTime = 0;
+  avatarVideo.play().catch(function() {});
+  videoWrap.classList.add("talking");
+  startMouthSync();
+}
+
+// ============ 2️⃣ USER SPEAKING: video pauses ============
+/** Called when user starts speaking (mic listening). */
+function onUserStartSpeaking() {
+  pauseAvatarVideo();
+  isListening = true;
+  status.textContent = "Listening... Speak now!";
+  voiceBtn.classList.add("listening");
+  voiceBtn.textContent = "🔴";
+}
+
+/** Called when user stops speaking (mic stopped). */
+function onUserStopSpeaking() {
+  isListening = false;
+  voiceBtn.classList.remove("listening");
+  voiceBtn.textContent = "🎤";
+}
+
+// ============ 3️⃣ CHATBOT LISTENING / PROCESSING: video stays paused ============
+/** While waiting for API response, video remains paused (no extra call needed). */
+
+// ============ 4️⃣ & 5️⃣ CHATBOT REPLIES: video plays with TTS, stops when TTS ends ============
+
+function showText(text, type) {
+  textDisplay.innerHTML = "";
+  const span = document.createElement("span");
+  span.style.flex = "1 1 100%";
+  span.textContent = text;
+  textDisplay.appendChild(span);
+  if (type === "bot") {
+    lastBotReply = text;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "play-voice-btn";
+    btn.textContent = "🔊 Play";
+    btn.onclick = () => speakText(lastBotReply);
+    textDisplay.appendChild(btn);
+  }
+  textDisplay.classList.add("show");
+  setTimeout(() => textDisplay.classList.remove("show"), 8000);
+}
+
+/** Pick a female TTS voice for the chatbot. */
+function pickFemaleVoice() {
+  const voices = synth.getVoices();
+  if (!voices.length) return;
+  const prefer = ["Microsoft Zira", "Google US English Female", "Samantha", "Karen", "Victoria", "Zira"];
+  for (const name of prefer) {
+    const v = voices.find(x => x.name.includes(name));
+    if (v) { femaleVoice = v; return; }
+  }
+  const female = voices.find(v => v.name.toLowerCase().includes("female"));
+  femaleVoice = female || voices.find(v => v.lang && v.lang.startsWith("en")) || voices[0];
+}
+
+/**
+ * Speak chatbot reply via TTS and sync video:
+ * - On TTS start: play video (loop so long TTS is covered).
+ * - On TTS end: pause video. Ensures proper sync between video and audio.
+ */
+function speakText(text) {
+  if (!text || !text.trim()) return;
+  try {
+    synth.cancel();
+    pauseAvatarVideo();
+  } catch (e) {}
+
+  isSpeaking = true;
+  status.textContent = "Qyrix is speaking (Text → Voice)";
+  showText(text, "bot");
+  if (synth.resume) synth.resume();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  utterance.rate = 0.9;
+  utterance.volume = 1.0;
+  if (femaleVoice) utterance.voice = femaleVoice;
+
+  // 4️⃣ When TTS starts, play video (with loop) so video and audio run together.
+  utterance.onstart = function() {
+    playAvatarVideoWithTTS();
+  };
+
+  // 5️⃣ When TTS ends, pause video so it stays in sync with audio.
+  utterance.onend = function() {
+    isSpeaking = false;
+    pauseAvatarVideo();
+    status.textContent = "Click mic to start talking";
+    try {
+      setTimeout(function() {
+        if (!isListening && recognition) {
+          status.textContent = "Speak now...";
+          recognition.start();
+        }
+      }, 300);
+    } catch (err) {}
+  };
+
+  utterance.onerror = function() {
+    isSpeaking = false;
+    pauseAvatarVideo();
+    status.textContent = "Click mic to start talking";
+  };
+
+  synth.speak(utterance);
+}
+
+// ============ 8️⃣ OPTIONAL: Simple mouth sync to TTS “volume” (visual pulse) ============
+/** Uses requestAnimationFrame to drive a visual “talking” effect (e.g. glow). For real mouth sync you’d need an avatar with mouth params (e.g. Live2D) and audio analysis. */
+function startMouthSync() {
+  if (mouthSyncRAF) return;
+  let t = 0;
+  function tick() {
+    if (!isSpeaking || !videoWrap) {
+      mouthSyncRAF = null;
+      return;
+    }
+    t += 0.15;
+    // Simple periodic intensity (no real volume here; would need Web Audio + AnalyserNode for that).
+    const intensity = 0.3 + 0.25 * Math.abs(Math.sin(t));
+    videoWrap.style.boxShadow = "0 0 " + (20 + intensity * 30) + "px rgba(0, 242, 255, " + intensity + ")";
+    mouthSyncRAF = requestAnimationFrame(tick);
+  }
+  mouthSyncRAF = requestAnimationFrame(tick);
+}
+
+function stopMouthSync() {
+  if (mouthSyncRAF) {
+    cancelAnimationFrame(mouthSyncRAF);
+    mouthSyncRAF = null;
+  }
+  if (videoWrap) videoWrap.style.boxShadow = "";
+}
+
+// ============ MIC / RECOGNITION ============
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = "en-US";
+
+  // 2️⃣ User starts speaking → pause video
+  recognition.onstart = function() {
+    onUserStartSpeaking();
+  };
+
+  recognition.onresult = function(e) {
+    const transcript = e.results[0][0].transcript;
+    status.textContent = "Voice → Text ✓";
+    showText(transcript, "user");
+    onUserStopSpeaking();
+    setTimeout(function() { sendMessage(transcript); }, 400);
+  };
+
+  recognition.onerror = function() {
+    onUserStopSpeaking();
+    status.textContent = "Error. Try again.";
+    setTimeout(function() { status.textContent = "Click mic to start talking"; }, 2000);
+  };
+
+  recognition.onend = function() {
+    onUserStopSpeaking();
+    if (!isSpeaking) status.textContent = "Click mic to start talking";
+  };
+
+  synth.addEventListener("voiceschanged", pickFemaleVoice);
+  setTimeout(pickFemaleVoice, 500);
+} else {
+  status.textContent = "Voice not supported. Use Chrome or Edge.";
+}
+
+function toggleVoice() {
+  if (!recognition) return;
+  if (isListening) {
+    recognition.stop();
+  } else {
+    // Jab user mic pe click kare aur bot bol rahi ho – turant chup karo, phir listen
+    if (isSpeaking) {
+      isSpeaking = false;
+      try { synth.cancel(); } catch (e) {}
+      pauseAvatarVideo();
+      status.textContent = "Listening...";
+      // Browser ko thoda time do TTS sach mein band karne ke liye, phir mic start
+      setTimeout(function() {
+        if (!recognition) return;
+        recognition.start();
+      }, 150);
+      return;
+    }
+    recognition.start();
+  }
+}
+
+// ============ CHATBOT API ============
+/** 3️⃣ Chatbot listens: we show “Getting answer…” and call API. Video stays paused until TTS starts. */
+async function sendMessage(text) {
+  isProcessing = true;
+  status.textContent = "Getting answer...";
+  pauseAvatarVideo();
+
+  try {
+    const res = await fetch(CONFIG.BACKEND_URL + CONFIG.CHAT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text, user_id: "default_user" })
+    });
+
+    var data = {};
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      data = {};
+    }
+    isProcessing = false;
+
+    if (!res.ok) {
+      var errMsg = data.detail ? (Array.isArray(data.detail) ? data.detail.map(function(d) { return d.msg || JSON.stringify(d); }).join(". ") : String(data.detail)) : ("Server error " + res.status);
+      status.textContent = "Server error";
+      status.classList.add("error");
+      showText("Backend returned " + res.status + ": " + errMsg + ". Is Aasho backend running on port 8002?", "error");
+      setTimeout(function() {
+        status.classList.remove("error");
+        status.textContent = "Click mic to start talking";
+      }, 6000);
+      return;
+    }
+
+    if (data.reply && !data.reply.startsWith("❌") && !data.reply.startsWith("⏳")) {
+      lastBotReply = data.reply;
+      status.textContent = "Text → Voice (speaking reply)";
+      speakText(data.reply);
+    } else {
+      var displayMsg = (data.reply && data.reply.trim()) ? data.reply : "No reply from server. Check: 1) Backend running (python aashu_ollama.py on port 8002), 2) Ollama running (ollama pull llama3.2:1b).";
+      status.textContent = (data.reply && data.reply.trim()) ? "See message below" : "Backend/Ollama issue";
+      status.classList.add("error");
+      showText(displayMsg, "error");
+      setTimeout(function() {
+        status.classList.remove("error");
+        status.textContent = "Click mic to start talking";
+      }, 6000);
+    }
+  } catch (err) {
+    isProcessing = false;
+    status.textContent = "Backend offline";
+    status.classList.add("error");
+    showText("Aasho backend offline or network error. Start: cd Backend then python aashu_ollama.py (port 8002). Make sure Ollama is running.", "error");
+    setTimeout(function() {
+      status.classList.remove("error");
+      status.textContent = "Click mic to start talking";
+    }, 6000);
+  }
+}
+
+// ============ INIT ============
+document.addEventListener("DOMContentLoaded", function() {
+  if (CONFIG.VIDEO_SRC && avatarVideo) {
+    const src = avatarVideo.querySelector("source");
+    if (src) src.src = CONFIG.VIDEO_SRC;
+  }
+  status.textContent = "Click mic to start talking";
+});
+</script>
+
+</body>
+</html>
